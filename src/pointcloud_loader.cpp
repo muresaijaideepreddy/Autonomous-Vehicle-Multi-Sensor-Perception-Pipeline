@@ -2,7 +2,7 @@
 #include <iostream>
 #include "pointcloud_loader.hpp"
 
-std::vector<PointsXYZ> loadPointCloudXYZFromFile(const std::string& file_path) {
+std::vector<PointsXYZ> loadPointCloudXYZ(const std::string& file_path) {
     std::vector<PointsXYZ> pointCloud;
     std::ifstream file(file_path);
     if(!file.is_open()) {
