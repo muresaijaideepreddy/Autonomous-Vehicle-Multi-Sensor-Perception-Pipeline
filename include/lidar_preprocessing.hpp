@@ -9,3 +9,6 @@ float max_range,
 float min_height,
 float max_height
 );
+std::vector<PointsXYZ> GroundRemoval(const std::vector<PointsXYZ>& raw_points,
+float ground_threshold
+);

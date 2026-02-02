@@ -15,3 +15,14 @@ std::vector<PointsXYZ> preprocessLidarData(const std::vector<PointsXYZ>& raw_poi
     }
     return filtered_points;
 }
+
+std::vector<PointsXYZ> GroundRemoval(const std::vector<PointsXYZ>& raw_points,
+                                    float ground_threshold) {
+    std::vector<PointsXYZ> non_ground_points;
+    for (const auto& point : raw_points) {
+        if (point.Z > ground_threshold) {
+            non_ground_points.push_back(point);
+        }
+    }
+    return non_ground_points;
+}
