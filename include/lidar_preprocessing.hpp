@@ -12,3 +12,8 @@ float max_height
 std::vector<PointsXYZ> GroundRemoval(const std::vector<PointsXYZ>& raw_points,
 float ground_threshold
 );
+std::vector<PointsXYZ> removeGroundRadial(
+    const std::vector<PointsXYZ>& points,
+    float radial_bin_size,
+    float ground_height_threshold
+);
