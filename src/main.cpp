@@ -6,9 +6,12 @@
 #include "lidar_preprocessing.hpp"
 #include "lidar_ROI_Preproceesing.hpp"
 #include "euclidean_clustering.hpp"
+#include "visuvalize_clusters.hpp"
+
 #include "bounding_box.hpp"
 #include "bounding_box_utils.hpp"
 #include "oriented_bounding_box_utils.hpp"
+
 
 int main()
 {
@@ -59,6 +62,7 @@ int main()
         std::cout << obb.length << " " << obb.width << " " << obb.height << "\n";
         std::cout << obb.yaw << "\n";
     }
-
+    saveClusters(clusters);
+    
     return 0;
 }
