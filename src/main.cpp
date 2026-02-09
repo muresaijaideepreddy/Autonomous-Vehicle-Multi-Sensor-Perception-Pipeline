@@ -13,6 +13,7 @@
 #include "oriented_bounding_box_utils.hpp"
 
 #include "voxel_clustering.hpp"
+#include "object_classification.hpp"
 int main()
 {
     std::string filename = "lidar_points.txt";
@@ -56,6 +57,9 @@ int main()
     for (size_t i = 0; i < clusters.size(); ++i)
     {
         BoundingBox box = computeAABB(clusters[i]);
+        std::string label = classifyObject(box);
+
+        std::cout << "Label: " << label << "\n";
 
         std::cout << "Cluster " << i << " AABB\n";
         std::cout << box.min_x << " " << box.max_x << "\n";
