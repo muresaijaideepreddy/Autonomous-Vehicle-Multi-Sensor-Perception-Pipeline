@@ -12,7 +12,7 @@
 #include "bounding_box_utils.hpp"
 #include "oriented_bounding_box_utils.hpp"
 
-
+#include "voxel_clustering.hpp"
 int main()
 {
     std::string filename = "lidar_points.txt";
@@ -41,8 +41,15 @@ int main()
 
     std::cout << "Non-ground Points: " << non_ground_points.size() << std::endl;
 
-    std::vector<Cluster> clusters =
-        euclideanClustering(non_ground_points, 0.5f, 50, 3000);
+    // std::vector<Cluster> clusters =
+    //     euclideanClustering(non_ground_points, 0.5f, 50, 3000);
+    std::vector<Cluster> raw_clusters = voxelClustering(non_ground_points, 0.25f, 3);
+    std::vector<Cluster> clusters;
+    for (const auto& c : raw_clusters)
+    {
+        if (isValidCluster(c))
+            clusters.push_back(c);
+    }
 
     std::cout << "Clusters: " << clusters.size() << std::endl;
 
