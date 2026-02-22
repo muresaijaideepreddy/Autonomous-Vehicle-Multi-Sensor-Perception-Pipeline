@@ -15,5 +15,6 @@ float ground_threshold
 std::vector<PointsXYZ> removeGroundRadial(
     const std::vector<PointsXYZ>& points,
     float radial_bin_size,
+    float slope_threshold,
     float ground_height_threshold
 );
