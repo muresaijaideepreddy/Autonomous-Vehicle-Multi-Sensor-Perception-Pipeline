@@ -12,7 +12,7 @@
 #include "oriented_bounding_box_utils.hpp"
 #include "object_classification.hpp"
 #include "visuvalize_clusters.hpp"
-
+#include "dbscan_clustering.hpp"
 static constexpr uint8_t CLUSTER_COLORS[][3] = {
     {255,  50,  50},
     { 50, 255,  50},
@@ -74,8 +74,11 @@ int main()
                   << " roi="        << roi_points.size()
                   << " non_ground=" << non_ground_points.size() << "\n";
 
-        const auto raw_clusters = voxelClustering(non_ground_points, 0.25f, 3);
-
+        //const auto raw_clusters = voxelClustering(non_ground_points, 0.25f, 3);
+        const auto raw_clusters = dbscanClustering(non_ground_points, {
+                                .epsilon    = 0.6f,
+                                .min_points = 8
+                            });
         std::vector<Cluster> clusters;
         clusters.reserve(raw_clusters.size());
         for (const auto& c : raw_clusters)

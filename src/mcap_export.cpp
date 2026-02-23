@@ -50,7 +50,7 @@ static std::vector<uint8_t> buildXYZ_CDR(const std::vector<PointsXYZ>& pts,
     pu8(b,0x00); pu8(b,0x01); pu8(b,0x00); pu8(b,0x00);
     pi32(b, int32_t(stamp_ns / 1000000000ULL));
     pu32(b, uint32_t(stamp_ns % 1000000000ULL));
-    pstr(b, "map");
+    pstr(b, "base_link");
     pu32(b, 1); pu32(b, N);
 
     pu32(b, 3);
@@ -83,7 +83,7 @@ static std::vector<uint8_t> buildXYZRGB_CDR(const std::vector<PointsXYZRGB>& pts
     pu8(b,0x00); pu8(b,0x01); pu8(b,0x00); pu8(b,0x00);
     pi32(b, int32_t(stamp_ns / 1000000000ULL));
     pu32(b, uint32_t(stamp_ns % 1000000000ULL));
-    pstr(b, "map");
+    pstr(b, "base_link");
     pu32(b, 1); pu32(b, N);
 
     pu32(b, 6);
@@ -106,7 +106,6 @@ static std::vector<uint8_t> buildXYZRGB_CDR(const std::vector<PointsXYZRGB>& pts
     return b;
 }
 
-// Foxglove SceneUpdate JSON — strict schema that Foxglove Studio expects
 static std::string buildBoxJSON(const std::vector<ExportBox>& boxes,
                                  uint64_t stamp_ns)
 {
@@ -122,7 +121,6 @@ static std::string buildBoxJSON(const std::vector<ExportBox>& boxes,
         const auto& box = boxes[i];
         if (i > 0) j += ",";
 
-        // Pick color by label
         std::string color;
         if      (box.label == "CAR")        color = "{\"r\":0.2,\"g\":0.5,\"b\":1.0,\"a\":0.8}";
         else if (box.label == "PEDESTRIAN") color = "{\"r\":1.0,\"g\":0.2,\"b\":0.2,\"a\":0.8}";
@@ -133,7 +131,7 @@ static std::string buildBoxJSON(const std::vector<ExportBox>& boxes,
         j += "{";
         j += "\"timestamp\":{\"sec\":" + std::to_string(sec) +
              ",\"nsec\":" + std::to_string(nsec) + "},";
-        j += "\"frame_id\":\"map\",";
+        j += "\"frame_id\":\"base_link\",";
         j += "\"id\":\"" + box.label + "_" + std::to_string(i) + "\",";
         j += "\"lifetime\":{\"sec\":0,\"nsec\":100000000},";
         j += "\"frame_locked\":true,";
@@ -234,8 +232,6 @@ uint32 count
     g_ch_clusters.messageEncoding = "cdr";
     g_writer.addChannel(g_ch_clusters);
 
-    // Foxglove SceneUpdate — use the official Foxglove schema name
-    // Foxglove Studio recognises "foxglove.SceneUpdate" natively
     const std::string box_schema_text = R"({
   "title": "foxglove.SceneUpdate",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
