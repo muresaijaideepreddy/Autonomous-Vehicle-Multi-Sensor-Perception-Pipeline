@@ -1,6 +1,7 @@
 #include <iostream>
 #include <vector>
 #include <string>
+#include <cmath>
 #include "mcap_export.hpp"
 #include "frame.hpp"
 #include "lidar_preprocessing.hpp"
@@ -13,7 +14,13 @@
 #include "object_classification.hpp"
 #include "visuvalize_clusters.hpp"
 #include "dbscan_clustering.hpp"
-static constexpr uint8_t CLUSTER_COLORS[][3] = {
+#include "tracker.hpp"
+#include "road_surface.hpp"
+
+static const std::string DATASET_PATH =
+    "/mnt/c/Users/91790/Documents/Research/Autonomous Driving/0000/";
+
+static constexpr uint8_t TRACK_COLORS[][3] = {
     {255,  50,  50},
     { 50, 255,  50},
     { 50, 100, 255},
@@ -25,21 +32,19 @@ static constexpr uint8_t CLUSTER_COLORS[][3] = {
     {  0, 255, 130},
     {200, 200, 200},
 };
-static constexpr int NUM_CLUSTER_COLORS =
-    static_cast<int>(sizeof(CLUSTER_COLORS) / sizeof(CLUSTER_COLORS[0]));
+static constexpr int NUM_TRACK_COLORS =
+    static_cast<int>(sizeof(TRACK_COLORS) / sizeof(TRACK_COLORS[0]));
 
 int main()
 {
-    std::string dataset_path =
-        "/mnt/c/Users/91790/Documents/Research/Autonomous Driving/0000/";
-
-    FrameSequenceLoader loader(dataset_path);
+    FrameSequenceLoader loader(DATASET_PATH);
 
     if (!loader.hasNext()) {
-        std::cerr << "[main] no frames found at: " << dataset_path << "\n";
+        std::cerr << "[main] no frames found at: " << DATASET_PATH << "\n";
         return 1;
     }
 
+    KalmanTracker tracker;
     int frame_idx = 0;
 
     while (loader.hasNext())
@@ -47,7 +52,6 @@ int main()
         std::cout << "\n=== frame " << frame_idx << " ===\n";
 
         const auto raw_points = loader.next();
-
         if (raw_points.empty()) {
             std::cerr << "[main] empty frame " << frame_idx << ", skipping\n";
             ++frame_idx;
@@ -74,11 +78,16 @@ int main()
                   << " roi="        << roi_points.size()
                   << " non_ground=" << non_ground_points.size() << "\n";
 
-        //const auto raw_clusters = voxelClustering(non_ground_points, 0.25f, 3);
+        const auto road_surface =
+            colorizeGroundSurface(roi_points, non_ground_points);
+
         const auto raw_clusters = dbscanClustering(non_ground_points, {
-                                .epsilon    = 0.6f,
-                                .min_points = 8
-                            });
+            .base_epsilon      = 0.6f,
+            .reference_range_m = 10.0f,
+            .max_epsilon       = 3.0f,
+            .min_points        = 8
+        });
+
         std::vector<Cluster> clusters;
         clusters.reserve(raw_clusters.size());
         for (const auto& c : raw_clusters)
@@ -88,36 +97,53 @@ int main()
         std::cout << "[cluster] " << raw_clusters.size()
                   << " raw -> " << clusters.size() << " valid\n";
 
+        std::vector<std::string> labels;
+        labels.reserve(clusters.size());
+        for (const auto& c : clusters)
+            labels.push_back(classifyObject(computeAABB(c)));
+
+        const auto tracks = tracker.update(
+            clusters, labels.data(), static_cast<int>(clusters.size()));
+
+        std::cout << "[tracker] " << tracks.size() << " active tracks\n";
+
         std::vector<PointsXYZRGB> colored_points;
-        for (size_t i = 0; i < clusters.size(); ++i) {
-            const auto& color = CLUSTER_COLORS[i % NUM_CLUSTER_COLORS];
-            for (const auto& pt : clusters[i].points)
+        for (const auto& c : clusters) {
+            const BoundingBox box = computeAABB(c);
+            const float cx = (box.min_x + box.max_x) * 0.5f;
+            const float cy = (box.min_y + box.max_y) * 0.5f;
+            int   track_id = 0;
+            float best     = 1e9f;
+            for (const auto& t : tracks) {
+                const float tx   = (t.box.min_x + t.box.max_x) * 0.5f;
+                const float ty   = (t.box.min_y + t.box.max_y) * 0.5f;
+                const float dist = std::sqrt((cx-tx)*(cx-tx) + (cy-ty)*(cy-ty));
+                if (dist < best) { best = dist; track_id = t.id; }
+            }
+            const auto& color = TRACK_COLORS[track_id % NUM_TRACK_COLORS];
+            for (const auto& pt : c.points)
                 colored_points.push_back({pt.X, pt.Y, pt.Z,
                                           color[0], color[1], color[2]});
         }
 
         std::vector<ExportBox> exportBoxes;
-        exportBoxes.reserve(clusters.size());
-        for (size_t i = 0; i < clusters.size(); ++i)
-        {
-            const BoundingBox box         = computeAABB(clusters[i]);
-            const OrientedBoundingBox obb = computeOBB_PCA(clusters[i]);
-            const std::string label       = classifyObject(box);
-
-            std::cout << "  [box " << i << "] " << label << "\n";
-
+        exportBoxes.reserve(tracks.size());
+        for (const auto& t : tracks) {
+            std::cout << "  [" << t.id << "] " << t.label
+                      << " vx=" << t.vx << " vy=" << t.vy
+                      << " missed=" << t.missed_frames << "\n";
             exportBoxes.push_back({
-                .cx    = (box.min_x + box.max_x) * 0.5f,
-                .cy    = (box.min_y + box.max_y) * 0.5f,
-                .cz    = (box.min_z + box.max_z) * 0.5f,
-                .sx    = box.max_x - box.min_x,
-                .sy    = box.max_y - box.min_y,
-                .sz    = box.max_z - box.min_z,
-                .label = label
+                .cx    = (t.box.min_x + t.box.max_x) * 0.5f,
+                .cy    = (t.box.min_y + t.box.max_y) * 0.5f,
+                .cz    = (t.box.min_z + t.box.max_z) * 0.5f,
+                .sx    = t.box.max_x - t.box.min_x,
+                .sy    = t.box.max_y - t.box.min_y,
+                .sz    = t.box.max_z - t.box.min_z,
+                .label = "[" + std::to_string(t.id) + "] " + t.label
             });
         }
 
-        saveFrameToMCAP(roi_points, colored_points, exportBoxes);
+        saveFrameToMCAP(roi_points, colored_points, road_surface, exportBoxes);
         saveClusters(clusters);
         ++frame_idx;
     }

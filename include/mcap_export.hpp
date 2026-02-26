@@ -12,6 +12,7 @@ struct ExportBox {
 
 void saveFrameToMCAP(const std::vector<PointsXYZ>&    all_points,
                      const std::vector<PointsXYZRGB>& cluster_points,
+                     const std::vector<PointsXYZRGB>& road_surface,
                      const std::vector<ExportBox>&    boxes);
 
 void closePointCloudMCAP();

@@ -50,27 +50,31 @@ void radiusSearch(int node_idx, const PointsXYZ& query,
 
     const auto& node = g_tree[node_idx];
 
-    const float dx = query.X - node.point.X;
-    const float dy = query.Y - node.point.Y;
-    const float dz = query.Z - node.point.Z;
+    const float dx      = query.X - node.point.X;
+    const float dy      = query.Y - node.point.Y;
+    const float dz      = query.Z - node.point.Z;
     const float dist_sq = dx*dx + dy*dy + dz*dz;
 
     if (dist_sq <= eps_sq)
         result.push_back(node.idx);
 
-    const int axis = depth % 3;
-    float diff = 0.0f;
-    if (axis == 0) diff = dx;
-    else if (axis == 1) diff = dy;
-    else diff = dz;
+    const int   axis = depth % 3;
+    const float diff = (axis == 0) ? dx : (axis == 1) ? dy : dz;
 
     const int first  = (diff <= 0.0f) ? node.left  : node.right;
     const int second = (diff <= 0.0f) ? node.right : node.left;
 
-    radiusSearch(first, query, eps_sq, depth + 1, result);
-
+    radiusSearch(first,  query, eps_sq, depth + 1, result);
     if (diff * diff <= eps_sq)
         radiusSearch(second, query, eps_sq, depth + 1, result);
+}
+
+inline float adaptiveEpsilon(const PointsXYZ& p,
+                              const DBSCANConfig& cfg)
+{
+    const float range = std::sqrt(p.X * p.X + p.Y * p.Y);
+    const float eps   = cfg.base_epsilon * (range / cfg.reference_range_m);
+    return std::min(eps, cfg.max_epsilon);
 }
 
 } // namespace
@@ -82,7 +86,6 @@ std::vector<Cluster> dbscanClustering(
     const int N = static_cast<int>(points.size());
     if (N == 0) return {};
 
-    // Build KD-tree
     g_tree.clear();
     g_tree.reserve(N);
 
@@ -91,10 +94,8 @@ std::vector<Cluster> dbscanClustering(
     for (int i = 0; i < N; ++i)
         indexed.push_back({points[i], i});
 
-    const int root    = buildKDTree(indexed, 0, N, 0);
-    const float eps_sq = cfg.epsilon * cfg.epsilon;
+    const int root = buildKDTree(indexed, 0, N, 0);
 
-    // DBSCAN
     constexpr int UNVISITED = -1;
     constexpr int NOISE     = -2;
 
@@ -104,6 +105,10 @@ std::vector<Cluster> dbscanClustering(
     for (int i = 0; i < N; ++i)
     {
         if (labels[i] != UNVISITED) continue;
+
+        // Epsilon scales with range of this specific point
+        const float eps    = adaptiveEpsilon(points[i], cfg);
+        const float eps_sq = eps * eps;
 
         std::vector<int> neighbors;
         neighbors.reserve(64);
@@ -125,17 +130,18 @@ std::vector<Cluster> dbscanClustering(
             const int cur = q.front();
             q.pop();
 
-            if (labels[cur] == NOISE)
-                labels[cur] = cluster_id;
-
-            if (labels[cur] != UNVISITED)
-                continue;
+            if (labels[cur] == NOISE)     labels[cur] = cluster_id;
+            if (labels[cur] != UNVISITED) continue;
 
             labels[cur] = cluster_id;
 
+            // Each point uses its own adaptive epsilon
+            const float cur_eps    = adaptiveEpsilon(points[cur], cfg);
+            const float cur_eps_sq = cur_eps * cur_eps;
+
             std::vector<int> cur_neighbors;
             cur_neighbors.reserve(64);
-            radiusSearch(root, points[cur], eps_sq, 0, cur_neighbors);
+            radiusSearch(root, points[cur], cur_eps_sq, 0, cur_neighbors);
 
             if (static_cast<int>(cur_neighbors.size()) >= cfg.min_points)
                 for (int n : cur_neighbors)
@@ -146,13 +152,11 @@ std::vector<Cluster> dbscanClustering(
         ++cluster_id;
     }
 
-    // Build Cluster objects
     std::vector<Cluster> clusters(cluster_id);
     for (int i = 0; i < N; ++i)
         if (labels[i] >= 0)
             clusters[labels[i]].points.push_back(points[i]);
 
-    // Remove empty clusters
     clusters.erase(
         std::remove_if(clusters.begin(), clusters.end(),
                        [](const Cluster& c){ return c.points.empty(); }),

@@ -5,7 +5,6 @@
 #include <cstring>
 #include <cstdint>
 #include <iostream>
-#include <chrono>
 #include <vector>
 #include <string>
 
@@ -14,6 +13,7 @@
 static mcap::McapWriter g_writer;
 static mcap::Channel    g_ch_all;
 static mcap::Channel    g_ch_clusters;
+static mcap::Channel    g_ch_road;
 static mcap::Channel    g_ch_boxes;
 static bool             g_initialized = false;
 static uint32_t         g_frame_index = 0;
@@ -112,68 +112,42 @@ static std::string buildBoxJSON(const std::vector<ExportBox>& boxes,
     const uint64_t sec  = stamp_ns / 1000000000ULL;
     const uint64_t nsec = stamp_ns % 1000000000ULL;
 
-    std::string j = "{";
-    j += "\"deletions\":[],";
-    j += "\"entities\":[";
+    std::string j = "{\"deletions\":[],\"entities\":[";
 
-    for (size_t i = 0; i < boxes.size(); ++i)
-    {
+    for (size_t i = 0; i < boxes.size(); ++i) {
         const auto& box = boxes[i];
         if (i > 0) j += ",";
 
         std::string color;
-        if      (box.label == "CAR")        color = "{\"r\":0.2,\"g\":0.5,\"b\":1.0,\"a\":0.8}";
-        else if (box.label == "PEDESTRIAN") color = "{\"r\":1.0,\"g\":0.2,\"b\":0.2,\"a\":0.8}";
-        else if (box.label == "CYCLIST")    color = "{\"r\":0.2,\"g\":1.0,\"b\":0.2,\"a\":0.8}";
-        else if (box.label == "TRUCK")      color = "{\"r\":1.0,\"g\":0.6,\"b\":0.0,\"a\":0.8}";
-        else                                color = "{\"r\":0.7,\"g\":0.7,\"b\":0.7,\"a\":0.5}";
+        if      (box.label.find("CAR")        != std::string::npos) color = "{\"r\":0.2,\"g\":0.5,\"b\":1.0,\"a\":0.8}";
+        else if (box.label.find("PEDESTRIAN") != std::string::npos) color = "{\"r\":1.0,\"g\":0.2,\"b\":0.2,\"a\":0.8}";
+        else if (box.label.find("CYCLIST")    != std::string::npos) color = "{\"r\":0.2,\"g\":1.0,\"b\":0.2,\"a\":0.8}";
+        else if (box.label.find("TRUCK")      != std::string::npos) color = "{\"r\":1.0,\"g\":0.6,\"b\":0.0,\"a\":0.8}";
+        else                                                         color = "{\"r\":0.7,\"g\":0.7,\"b\":0.7,\"a\":0.5}";
 
         j += "{";
-        j += "\"timestamp\":{\"sec\":" + std::to_string(sec) +
-             ",\"nsec\":" + std::to_string(nsec) + "},";
+        j += "\"timestamp\":{\"sec\":" + std::to_string(sec) + ",\"nsec\":" + std::to_string(nsec) + "},";
         j += "\"frame_id\":\"base_link\",";
-        j += "\"id\":\"" + box.label + "_" + std::to_string(i) + "\",";
+        j += "\"id\":\"box_" + std::to_string(i) + "\",";
         j += "\"lifetime\":{\"sec\":0,\"nsec\":100000000},";
         j += "\"frame_locked\":true,";
-        j += "\"metadata\":[{\"key\":\"label\",\"value\":\"" + box.label + "\"}],";
+        j += "\"metadata\":[],";
         j += "\"arrows\":[],";
         j += "\"cubes\":[{";
-        j +=   "\"pose\":{";
-        j +=     "\"position\":{";
-        j +=       "\"x\":" + std::to_string(box.cx) + ",";
-        j +=       "\"y\":" + std::to_string(box.cy) + ",";
-        j +=       "\"z\":" + std::to_string(box.cz);
-        j +=     "},";
-        j +=     "\"orientation\":{\"x\":0.0,\"y\":0.0,\"z\":0.0,\"w\":1.0}";
-        j +=   "},";
-        j +=   "\"size\":{";
-        j +=     "\"x\":" + std::to_string(box.sx) + ",";
-        j +=     "\"y\":" + std::to_string(box.sy) + ",";
-        j +=     "\"z\":" + std::to_string(box.sz);
-        j +=   "},";
+        j +=   "\"pose\":{\"position\":{\"x\":" + std::to_string(box.cx) + ",\"y\":" + std::to_string(box.cy) + ",\"z\":" + std::to_string(box.cz) + "},";
+        j +=   "\"orientation\":{\"x\":0.0,\"y\":0.0,\"z\":0.0,\"w\":1.0}},";
+        j +=   "\"size\":{\"x\":" + std::to_string(box.sx) + ",\"y\":" + std::to_string(box.sy) + ",\"z\":" + std::to_string(box.sz) + "},";
         j +=   "\"color\":" + color;
         j += "}],";
-        j += "\"cylinders\":[],";
-        j += "\"lines\":[],";
-        j += "\"triangles\":[],";
+        j += "\"cylinders\":[],\"lines\":[],\"triangles\":[],";
         j += "\"texts\":[{";
-        j +=   "\"pose\":{";
-        j +=     "\"position\":{";
-        j +=       "\"x\":" + std::to_string(box.cx) + ",";
-        j +=       "\"y\":" + std::to_string(box.cy) + ",";
-        j +=       "\"z\":" + std::to_string(box.cz + box.sz * 0.5f + 0.3f);
-        j +=     "},";
-        j +=     "\"orientation\":{\"x\":0.0,\"y\":0.0,\"z\":0.0,\"w\":1.0}";
-        j +=   "},";
-        j +=   "\"billboard\":true,";
-        j +=   "\"font_size\":0.3,";
-        j +=   "\"scale_invariant\":false,";
+        j +=   "\"pose\":{\"position\":{\"x\":" + std::to_string(box.cx) + ",\"y\":" + std::to_string(box.cy) + ",\"z\":" + std::to_string(box.cz + box.sz * 0.5f + 0.3f) + "},";
+        j +=   "\"orientation\":{\"x\":0.0,\"y\":0.0,\"z\":0.0,\"w\":1.0}},";
+        j +=   "\"billboard\":true,\"font_size\":0.3,\"scale_invariant\":false,";
         j +=   "\"color\":{\"r\":1.0,\"g\":1.0,\"b\":1.0,\"a\":1.0},";
         j +=   "\"text\":\"" + box.label + "\"";
         j += "}],";
-        j += "\"models\":[],";
-        j += "\"spheres\":[],";
-        j += "\"points\":[]";
+        j += "\"models\":[],\"spheres\":[],\"points\":[]";
         j += "}";
     }
 
@@ -232,6 +206,11 @@ uint32 count
     g_ch_clusters.messageEncoding = "cdr";
     g_writer.addChannel(g_ch_clusters);
 
+    g_ch_road.topic           = "/road_surface";
+    g_ch_road.schemaId        = pc_schema.id;
+    g_ch_road.messageEncoding = "cdr";
+    g_writer.addChannel(g_ch_road);
+
     const std::string box_schema_text = R"({
   "title": "foxglove.SceneUpdate",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -251,7 +230,7 @@ uint32 count
     g_writer.addChannel(g_ch_boxes);
 
     g_initialized = true;
-    std::cerr << "[mcap] writer ready — 3 channels\n";
+    std::cerr << "[mcap] writer ready — 4 channels\n";
 }
 
 static void writeMsg(mcap::Channel& ch, uint64_t stamp,
@@ -272,6 +251,7 @@ static void writeMsg(mcap::Channel& ch, uint64_t stamp,
 
 void saveFrameToMCAP(const std::vector<PointsXYZ>&    points,
                      const std::vector<PointsXYZRGB>& cluster_points,
+                     const std::vector<PointsXYZRGB>& road_surface,
                      const std::vector<ExportBox>&    boxes)
 {
     if (!g_initialized) initWriter();
@@ -282,6 +262,7 @@ void saveFrameToMCAP(const std::vector<PointsXYZ>&    points,
     std::cerr << "[mcap] frame " << g_frame_index
               << " | all=" << points.size()
               << " clustered=" << cluster_points.size()
+              << " road=" << road_surface.size()
               << " boxes=" << boxes.size() << "\n";
 
     if (!points.empty()) {
@@ -292,6 +273,11 @@ void saveFrameToMCAP(const std::vector<PointsXYZ>&    points,
     if (!cluster_points.empty()) {
         auto cdr = buildXYZRGB_CDR(cluster_points, stamp);
         writeMsg(g_ch_clusters, stamp, cdr.data(), cdr.size());
+    }
+
+    if (!road_surface.empty()) {
+        auto cdr = buildXYZRGB_CDR(road_surface, stamp);
+        writeMsg(g_ch_road, stamp, cdr.data(), cdr.size());
     }
 
     {
